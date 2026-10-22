@@ -1,0 +1,48 @@
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.eggs/
+build/
+dist/
+.pytest_cache/
+.ipynb_checkpoints/
+.mypy_cache/
+.ruff_cache/
+
+# Environments
+.venv/
+venv/
+.env
+
+# OS / tools
+.DS_Store
+wandb/
+logs/
+
+# Data, checkpoints, results (keep the directories)
+data/*
+!data/.gitkeep
+checkpoints/*
+!checkpoints/.gitkeep
+results/*
+!results/.gitkeep
+*.parquet
+*.csv
+
+# Editor and local tool settings
+.vscode/
+.idea/
+.claude/
+.cursor/
+.cursorrules
+.aider*
+.windsurf*
+.github/copilot-instructions.md
+CLAUDE.md
+AGENTS.md
+.AGENTS
+
+# Local notes
+docs/
+

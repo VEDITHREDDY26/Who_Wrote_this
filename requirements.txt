@@ -1,0 +1,21 @@
+# Core
+numpy
+pandas
+pyarrow
+pyyaml
+scikit-learn
+
+# Deep learning
+torch>=2.2
+transformers>=4.40
+datasets
+accelerate
+
+# Plotting
+matplotlib
+seaborn
+
+# Utilities
+tqdm
+pytest
+ipykernel

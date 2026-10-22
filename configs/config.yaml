@@ -1,0 +1,57 @@
+# Central project config. Relative paths resolve against the project root.
+# Any path can be overridden with an env var, e.g. TD_DATA_DIR=/scratch/me/data
+# (see src/config.py for the full list).
+
+paths:
+  data_dir: data
+  raw_dir: raw               # relative -> inside data_dir (follows TD_DATA_DIR)
+  splits_dir: splits         # relative -> inside data_dir (follows TD_DATA_DIR)
+  checkpoint_dir: checkpoints
+  results_dir: results
+
+seed: 42
+
+dataset:
+  name: RAID
+  split: train_none          # clean, non-attacked labeled split
+  text_column: generation    # the ONLY model input
+  label_source_column: model
+  keep_columns: [generation, model, domain, source_id, id]
+  group_column: source_id    # falls back to id when missing
+  group_fallback_column: id
+
+# Raw RAID `model` value -> 6-class label. Verify spellings with inspect_raw.py.
+label_map:
+  human: Human
+  gpt2: GPT
+  gpt3: GPT
+  chatgpt: GPT
+  gpt4: GPT
+  llama-chat: Llama
+  mistral: Mistral
+  mistral-chat: Mistral
+  mpt: MPT
+  mpt-chat: MPT
+  cohere: Cohere
+  cohere-chat: Cohere
+
+classes: [Human, GPT, Llama, Mistral, MPT, Cohere]
+
+# Applied before sampling, in this order (see build_splits.py). Normalized text is used
+# for the checks only; the original `generation` text is what the models see.
+cleaning:
+  zero_width_chars: ["​", "‌", "‍", "﻿"]
+  min_words: 10
+
+sampling:
+  keep_all_human: true
+  max_per_ai_family: 40000
+  seed: 42
+
+split:
+  method: GroupShuffleSplit
+  test_size: 0.20            # 80/20 trainval/test
+  val_size: 0.10             # 90/10 train/val (of trainval)
+  seed: 42
+  min_train_rows: 100000     # sanity checks asserted after splitting
+  min_test_rows: 10000
