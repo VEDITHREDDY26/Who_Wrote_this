@@ -55,7 +55,9 @@ AGENTS.md
 agents.md
 GEMINI.md
 
-# Local notes and planning docs
+# Local notes and planning docs (all Markdown except the README)
+*.md
+!README.md
 docs/
 notes/
 DECISIONS.md
