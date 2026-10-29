@@ -4,14 +4,15 @@ Path resolution order (highest wins):
   1. Env var for that path (e.g. TD_DATA_DIR, TD_CHECKPOINT_DIR)
   2. Value in config.yaml
 Relative paths are resolved against the project root, except raw_dir and splits_dir,
-which resolve against data_dir (so setting TD_DATA_DIR alone moves all data). The config file itself can be
-swapped with TD_CONFIG=/path/to/other.yaml. TD_ROOT overrides the project root.
+which resolve against data_dir (so setting TD_DATA_DIR alone moves all data). The config
+file itself can be swapped with TD_CONFIG=/path/to/other.yaml. TD_ROOT overrides the
+project root.
 """
 
 from __future__ import annotations
 
 import os
-from functools import lru_cache
+from functools import cache
 from pathlib import Path
 from typing import Any
 
@@ -39,7 +40,7 @@ def _resolve(p: str | os.PathLike, base: Path = PROJECT_ROOT) -> Path:
     return path if path.is_absolute() else (base / path).resolve()
 
 
-@lru_cache(maxsize=None)
+@cache
 def load_config(config_path: str | None = None) -> dict[str, Any]:
     """Load the YAML config, apply env overrides, and resolve `paths` to absolute Paths."""
     path = Path(config_path or os.environ.get("TD_CONFIG", DEFAULT_CONFIG_PATH))

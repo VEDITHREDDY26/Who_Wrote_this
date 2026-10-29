@@ -17,5 +17,9 @@ seaborn
 
 # Utilities
 tqdm
-pytest
 ipykernel
+
+# Dev tooling
+pytest
+pytest-timeout
+ruff
