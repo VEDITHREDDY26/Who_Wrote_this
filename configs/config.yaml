@@ -40,7 +40,7 @@ classes: [Human, GPT, Llama, Mistral, MPT, Cohere]
 # Applied before sampling, in this order (see build_splits.py). Normalized text is used
 # for the checks only; the original `generation` text is what the models see.
 cleaning:
-  zero_width_chars: ["​", "‌", "‍", "﻿"]
+  zero_width_chars: ["\u200B", "\u200C", "\u200D", "\uFEFF"]   # ZWSP, ZWNJ, ZWJ, BOM
   min_words: 10
 
 sampling:
@@ -55,3 +55,70 @@ split:
   seed: 42
   min_train_rows: 100000     # sanity checks asserted after splitting
   min_test_rows: 10000
+
+# Features shared by the models. Cached under <splits_dir>/<cache_subdir>/, keyed by a hash of
+# the split fingerprints + these settings, so changing either rebuilds automatically.
+features:
+  cache_subdir: features
+  tfidf:
+    word:
+      analyzer: word
+      ngram_range: [1, 2]
+      max_features: 15000
+      token_pattern: '(?u)\b\w+\b'     # keep 1-letter words ("I", "a")
+      sublinear_tf: true
+      lowercase: true
+      min_df: 2
+    char:
+      analyzer: char_wb
+      ngram_range: [3, 5]
+      max_features: 5000
+      sublinear_tf: true
+      lowercase: true
+      min_df: 2
+    dtype: float32
+    n_jobs: 2                          # fit the word and char parts in parallel
+  vocab:
+    max_words: 50000                   # plus <pad>=0 and <unk>=1
+    max_len: 256
+    lowercase: true
+    token_pattern: "\\w+(?:'\\w+)?|[^\\w\\s]"   # words (with apostrophes) and punctuation
+    pad_token: "<pad>"
+    unk_token: "<unk>"
+
+class_weights:
+  method: balanced                     # sklearn compute_class_weight
+  file: class_weights.json             # inside results_dir; computed once from full train
+
+# Defaults for the PyTorch models (MLP, CNN, LSTM). models.<name>.training overrides these.
+training:
+  batch_size: 64
+  eval_batch_size: 512
+  max_epochs: 10
+  lr: 1.0e-3
+  weight_decay: 0.01
+  scheduler: cosine                    # none | linear | cosine
+  warmup_ratio: 0.05                   # share of all optimizer steps used for warmup
+  max_grad_norm: 1.0
+  amp: true                            # mixed precision, used on CUDA only
+  patience: 3                          # early stopping on val macro-F1
+  min_delta: 0.0                       # improvement needed to count as better
+  checkpoint_every_minutes: 10
+  max_nonfinite_per_epoch: 5           # NaN/Inf losses tolerated per epoch
+  log_every_steps: 200
+  human_label: Human                   # for the human false-positive rate
+
+# Per-model hyperparameters. The input type (tfidf / tokens / hf) is fixed in the model
+# registry (src/models/__init__.py). A `training:` block here overrides the defaults above.
+models:
+  dummy:
+    dropout: 0.0
+  mlp: {}
+  cnn: {}
+  lstm: {}
+  transformer: {}
+
+baselines:
+  length:
+    max_iter: 1000
+    C: 1.0

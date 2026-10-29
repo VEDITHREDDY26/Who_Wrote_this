@@ -5,8 +5,8 @@ Path resolution order (highest wins):
   2. Value in config.yaml
 Relative paths are resolved against the project root, except raw_dir and splits_dir,
 which resolve against data_dir (so setting TD_DATA_DIR alone moves all data). The config
-file itself can be swapped with TD_CONFIG=/path/to/other.yaml. TD_ROOT overrides the
-project root.
+file itself can be swapped with TD_CONFIG=/path/to/other.yaml, or per process with
+use_config(path) (what the --config CLI flags do). TD_ROOT overrides the project root.
 """
 
 from __future__ import annotations
@@ -14,9 +14,12 @@ from __future__ import annotations
 import os
 from functools import cache
 from pathlib import Path
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 import yaml
+
+if TYPE_CHECKING:
+    import torch
 
 PROJECT_ROOT = Path(os.environ.get("TD_ROOT", Path(__file__).resolve().parents[1]))
 DEFAULT_CONFIG_PATH = PROJECT_ROOT / "configs" / "config.yaml"
@@ -34,16 +37,35 @@ PATH_ENV_VARS = {
 # paths that resolve relative to data_dir instead of the project root
 DATA_SUBDIRS = {"raw_dir", "splits_dir"}
 
+_active_config: Path | None = None  # set by use_config(); None means TD_CONFIG or default
+
 
 def _resolve(p: str | os.PathLike, base: Path = PROJECT_ROOT) -> Path:
     path = Path(os.path.expandvars(os.path.expanduser(str(p))))
     return path if path.is_absolute() else (base / path).resolve()
 
 
+def use_config(config_path: str | os.PathLike | None) -> None:
+    """Make `config_path` the config that load_config() and get_path() use in this process.
+
+    Without this, get_path() would silently keep reading the default config even when a
+    script was given --config. Passing None restores the default (TD_CONFIG or config.yaml).
+    """
+    global _active_config
+    if config_path is not None and not Path(config_path).is_file():
+        raise FileNotFoundError(f"config file {config_path} does not exist")
+    _active_config = Path(config_path).resolve() if config_path is not None else None
+    load_config.cache_clear()
+
+
 @cache
 def load_config(config_path: str | None = None) -> dict[str, Any]:
-    """Load the YAML config, apply env overrides, and resolve `paths` to absolute Paths."""
-    path = Path(config_path or os.environ.get("TD_CONFIG", DEFAULT_CONFIG_PATH))
+    """Load the YAML config, apply env overrides, and resolve `paths` to absolute Paths.
+
+    With no argument this is the active config: use_config() > TD_CONFIG > configs/config.yaml.
+    """
+    path = Path(config_path or _active_config or os.environ.get("TD_CONFIG",
+                                                                DEFAULT_CONFIG_PATH))
     with open(path) as f:
         cfg = yaml.safe_load(f) or {}
 
@@ -67,7 +89,7 @@ def get_path(key: str, create: bool = False) -> Path:
     return path
 
 
-def get_device(prefer: str | None = None):
+def get_device(prefer: str | None = None) -> torch.device:
     """Return a torch.device, auto-detected as cuda > mps > cpu.
 
     `prefer` (or env var TD_DEVICE) forces a specific device, e.g. "cpu" for debugging.

@@ -38,11 +38,32 @@ results/*
 .cursorrules
 .aider*
 .windsurf*
+.continue/
+.clinerules
+.roo/
+.gemini/
+.codex/
+.mcp.json
 .github/copilot-instructions.md
-CLAUDE.md
-AGENTS.md
+.agents
 .AGENTS
+.agent/
+CLAUDE.md
+CLAUDE.local.md
+claude.md
+AGENTS.md
+agents.md
+GEMINI.md
 
-# Local notes
+# Local notes and planning docs
 docs/
-
+notes/
+DECISIONS.md
+decisions.md
+NOTES.md
+notes.md
+PLAN.md
+plan.md
+TODO.md
+todo.md
+*.local.md

@@ -22,7 +22,6 @@ Usage: python -m src.data.build_splits [--force]
 from __future__ import annotations
 
 import argparse
-import hashlib
 import itertools
 import json
 import re
@@ -32,8 +31,8 @@ import pandas as pd
 from sklearn.model_selection import GroupShuffleSplit
 
 from src.config import get_path, load_config
+from src.data.splits import SPLITS, fingerprint_ids
 
-SPLITS = ("train", "val", "test")
 OUT_COLUMNS = ["id", "text", "label", "label_id", "domain", "group"]
 
 
@@ -164,8 +163,7 @@ def compute_stats(cleaning, sampling, splits, cfg) -> dict:
             k: {c: int((v["label"] == c).sum()) for c in classes} for k, v in splits.items()},
         "words_per_text": words,
         # sha256 of sorted ids: compare across machines to confirm identical splits
-        "fingerprint": {k: hashlib.sha256("\n".join(sorted(v["id"])).encode()).hexdigest()[:16]
-                        for k, v in splits.items()},
+        "fingerprint": {k: fingerprint_ids(v["id"]) for k, v in splits.items()},
     }
 
 
