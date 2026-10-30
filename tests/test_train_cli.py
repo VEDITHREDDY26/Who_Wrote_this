@@ -82,8 +82,8 @@ def test_dummy_trains_end_to_end_and_rerun_is_a_noop(workspace: Path) -> None:
     assert again.returncode == 0 and "already finished" in again.output
 
 
-@pytest.mark.parametrize("model", ["cnn", "lstm"])
-def test_token_models_train_end_to_end(workspace: Path, model: str) -> None:
+@pytest.mark.parametrize("model", ["mlp", "cnn", "lstm"])
+def test_models_train_end_to_end(workspace: Path, model: str) -> None:
     proc = run_cli(workspace / "config.yaml", "--model", model, "--max-epochs", "1")
     assert proc.returncode == 0, proc.output
     assert "72 train rows" in proc.output  # the fake split, not the real data
@@ -93,8 +93,7 @@ def test_token_models_train_end_to_end(workspace: Path, model: str) -> None:
     assert metrics["n_samples"] == 24 and metrics["extra"]["num_parameters"] > 0
 
 
-@pytest.mark.parametrize("model, hint", [("mlp", "src/models/mlp.py"),
-                                         ("transformer", "Hugging Face")])
+@pytest.mark.parametrize("model, hint", [("transformer", "Hugging Face")])
 def test_unimplemented_models_fail_with_instructions(workspace: Path, model: str,
                                                      hint: str) -> None:
     proc = run_cli(workspace / "config.yaml", "--model", model)

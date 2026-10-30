@@ -113,7 +113,9 @@ training:
 models:
   dummy:
     dropout: 0.0
-  mlp: {}
+  mlp:
+    hidden_sizes: [512, 128]
+    dropout: 0.5
   cnn:
     embed_dim: 128
     filter_sizes: [3, 4, 5]
