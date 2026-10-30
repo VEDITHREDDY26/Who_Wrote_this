@@ -126,7 +126,28 @@ models:
     hidden_size: 128
     num_layers: 1
     dropout: 0.3
-  transformer: {}
+  transformer:
+    pretrained_name: distilbert/distilbert-base-cased   # cased: capitalization is a style cue
+    max_len: 256
+    training:
+      batch_size: 32
+      eval_batch_size: 128
+      max_epochs: 3
+      lr: 5.0e-5
+      scheduler: linear
+      warmup_ratio: 0.06
+      patience: 2
+
+# Tuning grids for `python -m src.tune --model <name>`: each entry is a run name and the
+# overrides merged into models.<name> (a `training:` block overrides training settings).
+# The current config is always included as the run "default".
+tuning:
+  max_attempts: 3                      # automatic restarts of a crashed run
+  transformer:
+    lr3e5: {training: {lr: 3.0e-5}}
+    lr2e5: {training: {lr: 2.0e-5}}
+    lr5e5-e2: {training: {max_epochs: 2}}
+    lr3e5-e4: {training: {lr: 3.0e-5, max_epochs: 4}}
 
 baselines:
   length:
