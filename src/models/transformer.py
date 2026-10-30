@@ -269,7 +269,8 @@ class LogCallback(TrainerCallback):
     def on_log(self, args: TrainingArguments, state: TrainerState, control: TrainerControl,
                logs: Mapping[str, Any] | None = None, **kwargs: Any) -> None:
         if logs:
-            shown = {k: round(v, 4) if isinstance(v, float) else v for k, v in logs.items()}
+            # 4 significant digits, so small learning rates do not show as 0.0
+            shown = {k: float(f"{v:.4g}") if isinstance(v, float) else v for k, v in logs.items()}
             logger.info("step %d/%d  epoch %.2f  %s", state.global_step, state.max_steps,
                         state.epoch or 0.0, shown)
 
@@ -357,6 +358,7 @@ def train_transformer(splits: Mapping[str, pd.DataFrame], *, params: Mapping[str
         return TransformerOutcome(result, done["metrics"], done["num_parameters"])
 
     device = get_device()
+    logging.getLogger("httpx").setLevel(logging.WARNING)  # one INFO line per Hub request
     tokenizer = AutoTokenizer.from_pretrained(hp.pretrained_name)
     logger.info("Tokenizing %s (max_len %d)", ", ".join(f"{n}: {len(df)}"
                                                        for n, df in splits.items()), hp.max_len)
