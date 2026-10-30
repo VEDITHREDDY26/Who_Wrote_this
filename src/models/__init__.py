@@ -13,7 +13,9 @@ from typing import Any
 
 from torch import nn
 
+from src.models.cnn import build_cnn
 from src.models.dummy import build_dummy
+from src.models.lstm import build_lstm
 
 INPUT_KINDS = ("tfidf", "tokens", "hf")
 
@@ -38,12 +40,8 @@ REGISTRY: dict[str, ModelSpec] = {
     "mlp": ModelSpec("mlp", "tfidf", None,
                      "write build_mlp(params, *, input_dim, num_classes) in src/models/mlp.py "
                      "and register it here"),
-    "cnn": ModelSpec("cnn", "tokens", None,
-                     "write build_cnn(params, *, vocab_size, pad_id, num_classes) in "
-                     "src/models/cnn.py and register it here"),
-    "lstm": ModelSpec("lstm", "tokens", None,
-                      "write build_lstm(params, *, vocab_size, pad_id, num_classes) in "
-                      "src/models/lstm.py and register it here"),
+    "cnn": ModelSpec("cnn", "tokens", build_cnn),
+    "lstm": ModelSpec("lstm", "tokens", build_lstm),
     # Transformer hook: trained by Hugging Face's Trainer, not src.trainer.Trainer.
     # See src/models/transformer.py:train_transformer.
     "transformer": ModelSpec("transformer", "hf", None,
