@@ -126,7 +126,17 @@ models:
     hidden_size: 128
     num_layers: 1
     dropout: 0.3
-  transformer: {}
+  transformer:
+    pretrained_name: distilbert/distilbert-base-cased   # cased: capitalization is a style cue
+    max_len: 256
+    training:
+      batch_size: 32
+      eval_batch_size: 128
+      max_epochs: 3
+      lr: 5.0e-5
+      scheduler: linear
+      warmup_ratio: 0.06
+      patience: 2
 
 baselines:
   length:

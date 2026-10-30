@@ -43,9 +43,8 @@ def write_config(workspace: Path, name: str, **training: object) -> Path:
     return path
 
 
-@pytest.fixture(scope="module")
-def workspace(tmp_path_factory: pytest.TempPathFactory) -> Path:
-    root = tmp_path_factory.mktemp("cli")
+def make_workspace(root: Path) -> Path:
+    """Fake train/val splits and a config pointing every path into `root`."""
     splits = root / "data" / "splits"
     splits.mkdir(parents=True)
     rng = random.Random(0)
@@ -53,6 +52,11 @@ def workspace(tmp_path_factory: pytest.TempPathFactory) -> Path:
     fake_split(4, "v", rng).to_parquet(splits / "val.parquet", index=False)
     write_config(root, "config.yaml")
     return root
+
+
+@pytest.fixture(scope="module")
+def workspace(tmp_path_factory: pytest.TempPathFactory) -> Path:
+    return make_workspace(tmp_path_factory.mktemp("cli"))
 
 
 def run_cli(config: Path, *args: str) -> subprocess.CompletedProcess:
@@ -91,14 +95,6 @@ def test_models_train_end_to_end(workspace: Path, model: str) -> None:
     assert (workspace / "checkpoints" / model / "default" / "best.pt").exists()
     metrics = json.loads((results / f"{model}_val_metrics.json").read_text())
     assert metrics["n_samples"] == 24 and metrics["extra"]["num_parameters"] > 0
-
-
-@pytest.mark.parametrize("model, hint", [("transformer", "Hugging Face")])
-def test_unimplemented_models_fail_with_instructions(workspace: Path, model: str,
-                                                     hint: str) -> None:
-    proc = run_cli(workspace / "config.yaml", "--model", model)
-    assert proc.returncode == 2
-    assert "not implemented yet" in proc.output and hint in proc.output
 
 
 def test_config_change_is_refused_until_force_new(workspace: Path) -> None:
