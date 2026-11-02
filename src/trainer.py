@@ -280,6 +280,33 @@ def _format_seconds(seconds: float) -> str:
     return f"{hours}h{minutes:02d}m{secs:02d}s" if hours else f"{minutes}m{secs:02d}s"
 
 
+def predict_proba(model: nn.Module, data: ArrayDataset, *, device: torch.device,
+                  batch_size: int, use_amp: bool) -> np.ndarray:
+    """Class probabilities for every row of `data`, in order (halves the batch on OOM).
+
+    `model` must already be on `device`; `use_amp` enables float16 autocast (CUDA only).
+    """
+    model.eval()
+    order = torch.arange(len(data))
+    outputs, start = [], 0
+    with torch.no_grad():
+        while start < len(data):
+            idx = order[start:start + batch_size]
+            try:
+                x, _ = data.batch(idx)
+                with torch.autocast(device.type, dtype=torch.float16, enabled=use_amp):
+                    logits = model(x.to(device))
+                outputs.append(torch.softmax(logits.float(), dim=-1).cpu())
+                start += len(idx)
+            except RuntimeError as err:
+                if not _is_out_of_memory(err) or batch_size == 1:
+                    raise
+                _free_device_memory(device)
+                batch_size = max(1, batch_size // 2)
+                logger.warning("Out of memory during evaluation; eval batch -> %d", batch_size)
+    return torch.cat(outputs).numpy()
+
+
 def _append_jsonl(path: Path, record: Mapping[str, Any]) -> None:
     with open(path, "a", encoding="utf-8") as f:
         f.write(json.dumps(record) + "\n")
@@ -389,28 +416,8 @@ class Trainer:
 
     def predict_proba(self, data: ArrayDataset) -> np.ndarray:
         """Class probabilities for every row of `data`, in order."""
-        self.model.eval()
-        batch_size = self.settings.eval_batch_size
-        order = torch.arange(len(data))
-        outputs, start = [], 0
-        with torch.no_grad():
-            while start < len(data):
-                idx = order[start:start + batch_size]
-                try:
-                    x, _ = data.batch(idx)
-                    with torch.autocast(self.device.type, dtype=torch.float16,
-                                        enabled=self.use_amp):
-                        logits = self.model(x.to(self.device))
-                    outputs.append(torch.softmax(logits.float(), dim=-1).cpu())
-                    start += len(idx)
-                except RuntimeError as err:
-                    if not _is_out_of_memory(err) or batch_size == 1:
-                        raise
-                    _free_device_memory(self.device)
-                    batch_size = max(1, batch_size // 2)
-                    logger.warning("Out of memory during evaluation; eval batch -> %d",
-                                   batch_size)
-        return torch.cat(outputs).numpy()
+        return predict_proba(self.model, data, device=self.device,
+                             batch_size=self.settings.eval_batch_size, use_amp=self.use_amp)
 
     # ----------------------------------------------------------------------------- training
     def _train_loop(self) -> str:

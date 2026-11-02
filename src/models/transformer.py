@@ -29,13 +29,14 @@ import numpy as np
 import pandas as pd
 import torch
 import torch.nn.functional as F
-from torch.utils.data import Dataset
+from torch.utils.data import DataLoader, Dataset
 from transformers import (
     AutoModelForSequenceClassification,
     AutoTokenizer,
     DataCollatorWithPadding,
     EarlyStoppingCallback,
     EvalPrediction,
+    PreTrainedModel,
     PreTrainedTokenizerBase,
     PrinterCallback,
     Trainer,
@@ -159,6 +160,39 @@ def mixed_precision(device: torch.device, enabled: bool) -> dict[str, bool]:
 def softmax(logits: np.ndarray) -> np.ndarray:
     """Row-wise softmax in float64."""
     return torch.softmax(torch.as_tensor(logits, dtype=torch.float64), dim=-1).numpy()
+
+
+def load_best_model(checkpoint_dir: Path) -> tuple[PreTrainedModel, PreTrainedTokenizerBase]:
+    """Load a finished run's best epoch (checkpoint_dir/best_model/) and its tokenizer."""
+    path = checkpoint_dir / BEST_MODEL_DIR
+    if not path.is_dir():
+        raise FileNotFoundError(f"{path} not found; it is written when training finishes "
+                                "(python -m src.train --model transformer ...)")
+    return (AutoModelForSequenceClassification.from_pretrained(path),
+            AutoTokenizer.from_pretrained(path))
+
+
+def predict_proba_texts(model: PreTrainedModel, tokenizer: PreTrainedTokenizerBase,
+                        texts: Sequence[str], *, max_len: int, batch_size: int,
+                        device: torch.device, use_amp: bool) -> np.ndarray:
+    """Class probabilities for each text (truncated to `max_len` tokens), in order.
+
+    `use_amp` enables bf16/fp16 autocast on CUDA, as in training; it is ignored elsewhere.
+    """
+    data = encode_texts(tokenizer, texts, np.zeros(len(texts), dtype=np.int64), max_len)
+    loader = DataLoader(data, batch_size=batch_size,
+                        collate_fn=DataCollatorWithPadding(tokenizer))
+    precision = mixed_precision(device, use_amp)
+    dtype = torch.bfloat16 if precision["bf16"] else torch.float16
+    model.to(device).eval()
+    outputs = []
+    with torch.no_grad():
+        for batch in loader:
+            inputs = {k: v.to(device) for k, v in batch.items() if k != "labels"}
+            with torch.autocast(device.type, dtype=dtype, enabled=any(precision.values())):
+                logits = model(**inputs).logits
+            outputs.append(softmax(logits.float().cpu().numpy()))
+    return np.concatenate(outputs)
 
 
 class WeightedLossTrainer(Trainer):
