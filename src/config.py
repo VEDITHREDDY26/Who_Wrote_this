@@ -58,14 +58,18 @@ def use_config(config_path: str | os.PathLike | None) -> None:
     load_config.cache_clear()
 
 
+def active_config_path() -> Path:
+    """The config file in use: use_config() > TD_CONFIG > configs/config.yaml."""
+    return Path(_active_config or os.environ.get("TD_CONFIG", DEFAULT_CONFIG_PATH))
+
+
 @cache
 def load_config(config_path: str | None = None) -> dict[str, Any]:
     """Load the YAML config, apply env overrides, and resolve `paths` to absolute Paths.
 
     With no argument this is the active config: use_config() > TD_CONFIG > configs/config.yaml.
     """
-    path = Path(config_path or _active_config or os.environ.get("TD_CONFIG",
-                                                                DEFAULT_CONFIG_PATH))
+    path = Path(config_path) if config_path else active_config_path()
     with open(path) as f:
         cfg = yaml.safe_load(f) or {}
 

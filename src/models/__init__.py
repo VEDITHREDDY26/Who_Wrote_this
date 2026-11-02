@@ -16,6 +16,7 @@ from torch import nn
 from src.models.cnn import build_cnn
 from src.models.dummy import build_dummy
 from src.models.lstm import build_lstm
+from src.models.mlp import build_mlp
 
 INPUT_KINDS = ("tfidf", "tokens", "hf")
 
@@ -31,22 +32,18 @@ class ModelSpec:
 
     @property
     def implemented(self) -> bool:
-        """True once a builder (or, for "hf", a training function) exists."""
-        return self.build is not None
+        """True once a builder exists ("hf" models are trained by src/models/transformer.py)."""
+        return self.build is not None or self.input_kind == "hf"
 
 
 REGISTRY: dict[str, ModelSpec] = {
     "dummy": ModelSpec("dummy", "tfidf", build_dummy),
-    "mlp": ModelSpec("mlp", "tfidf", None,
-                     "write build_mlp(params, *, input_dim, num_classes) in src/models/mlp.py "
-                     "and register it here"),
+    "mlp": ModelSpec("mlp", "tfidf", build_mlp),
     "cnn": ModelSpec("cnn", "tokens", build_cnn),
     "lstm": ModelSpec("lstm", "tokens", build_lstm),
     # Transformer hook: trained by Hugging Face's Trainer, not src.trainer.Trainer.
     # See src/models/transformer.py:train_transformer.
-    "transformer": ModelSpec("transformer", "hf", None,
-                             "implement train_transformer() in src/models/transformer.py "
-                             "(Hugging Face Trainer with its own checkpointing)"),
+    "transformer": ModelSpec("transformer", "hf", None),
 }
 
 

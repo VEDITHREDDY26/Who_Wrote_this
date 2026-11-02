@@ -126,9 +126,6 @@ def run(args: argparse.Namespace) -> int:
     use_config(args.config)  # get_path() must follow --config too, not just cfg
     cfg = load_config()
     spec = get_model_spec(args.model)
-    if spec.input_kind == "hf":  # === TRANSFORMER HOOK: Hugging Face Trainer ===
-        return train_transformer(cfg, run_name=args.run_name, resume=args.resume,
-                                 max_epochs=args.max_epochs, subset=args.subset)
     require_implemented(spec)
 
     run_name = args.run_name
@@ -148,36 +145,51 @@ def run(args: argparse.Namespace) -> int:
     train = (stratified_subset(train_full, args.subset, label_column="label_id",
                                seed=cfg["seed"]) if args.subset else train_full)
     splits = {"train": train, "val": val}
-    data, input_info, dims = build_datasets(spec, splits, cfg)
-
     params = model_params(cfg, args.model)
     settings = training_config(cfg, args.model, args.max_epochs)
-    seed_everything(cfg["seed"])  # model init does not depend on feature-building randomness
-    model = build_model(args.model, params, **dims)
-    run_config = {"model": args.model, "model_params": params, "input": input_info,
-                  "subset": args.subset, "train_fingerprint": fingerprint_ids(train["id"]),
+    label = args.model if run_name == DEFAULT_RUN_NAME else f"{args.model}-{run_name}"
+    run_config = {"model": args.model, "model_params": params, "subset": args.subset,
+                  "train_fingerprint": fingerprint_ids(train["id"]),
                   "val_fingerprint": fingerprint_ids(val["id"]),
                   "class_weights": class_weights.tolist()}
-    trainer = Trainer(model, data["train"], data["val"], settings=settings,
-                      class_weights=class_weights, class_names=cfg["classes"],
-                      run_config=run_config, checkpoint_dir=checkpoint_dir,
-                      results_dir=run_results_dir)
-    result = trainer.fit(resume=args.resume)
 
-    if result.status == "stopped":
+    if spec.input_kind == "hf":  # === TRANSFORMER: Hugging Face Trainer ===
+        outcome = train_transformer(
+            splits, params=params, settings=settings, class_weights=class_weights.tolist(),
+            class_names=cfg["classes"], run_config=run_config, checkpoint_dir=checkpoint_dir,
+            results_dir=run_results_dir, label=label, run_name=run_name, resume=args.resume,
+            subset=args.subset)
+        result, metrics, num_parameters = outcome.result, outcome.metrics, outcome.num_parameters
+    else:
+        data, input_info, dims = build_datasets(spec, splits, cfg)
+        seed_everything(cfg["seed"])  # model init does not depend on feature-building randomness
+        model = build_model(args.model, params, **dims)
+        trainer = Trainer(model, data["train"], data["val"], settings=settings,
+                          class_weights=class_weights, class_names=cfg["classes"],
+                          run_config=run_config | {"input": input_info},
+                          checkpoint_dir=checkpoint_dir, results_dir=run_results_dir)
+        result = trainer.fit(resume=args.resume)
+        num_parameters = trainer.num_parameters
+        metrics = (None if result.status == "stopped"
+                   else evaluate_best(trainer, result, label, run_name, args.subset))
+
+    if result.status == "stopped" or metrics is None:
         print(f"Stopped: checkpoint saved in {checkpoint_dir}, safe to resume "
               "(rerun the same command).")
         return result.exit_code
-    label = args.model if run_name == DEFAULT_RUN_NAME else f"{args.model}-{run_name}"
-    metrics = evaluate_best(trainer, result, label, run_name, args.subset)
+    print_summary(label, result, metrics, num_parameters)
+    return 0
+
+
+def print_summary(label: str, result: FitResult, metrics: Mapping[str, Any],
+                  num_parameters: int) -> None:
+    """CLI summary of a finished run."""
     print(f"\n{label}: {result.status} after {result.epochs_completed} epochs "
           f"(best epoch {result.best_epoch})")
     print(f"  val macro-F1  {metrics['macro_f1']:.4f}")
     print(f"  val accuracy  {metrics['accuracy']:.4f}")
     print(f"  human FPR     {metrics['human_fpr']}")
-    print(f"  train time    {result.train_time_seconds:.1f}s, "
-          f"{trainer.num_parameters:,} parameters")
-    return 0
+    print(f"  train time    {result.train_time_seconds:.1f}s, {num_parameters:,} parameters")
 
 
 def main(argv: Sequence[str] | None = None) -> int:

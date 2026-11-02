@@ -219,7 +219,8 @@ def epoch_permutation(n: int, seed: int, epoch: int) -> torch.Tensor:
     return torch.randperm(n, generator=generator)
 
 
-def _jsonable(obj: Any) -> Any:
+def to_jsonable(obj: Any) -> Any:
+    """Round-trip through JSON (sorted keys, unknown types as str) for hashing and diffs."""
     return json.loads(json.dumps(obj, sort_keys=True, default=str))
 
 
@@ -332,7 +333,7 @@ class Trainer:
         self.use_amp = settings.amp and self.device.type == "cuda"
         self.scaler = torch.amp.GradScaler("cuda", enabled=self.use_amp)
 
-        self.full_config = _jsonable({"run": dict(run_config), "training": settings.hashed()})
+        self.full_config = to_jsonable({"run": dict(run_config), "training": settings.hashed()})
         self.config_hash = config_hash(self.full_config)
         self.state = _State()
         self._stop_signal: int | None = None
