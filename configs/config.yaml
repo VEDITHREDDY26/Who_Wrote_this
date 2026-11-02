@@ -149,6 +149,11 @@ tuning:
     lr5e5-e2: {training: {max_epochs: 2}}
     lr3e5-e4: {training: {lr: 3.0e-5, max_epochs: 4}}
 
+final_test:
+  # Before scoring test, each reloaded model must reproduce its saved val macro-F1 within this
+  # (small differences come from scoring on another device or with mixed precision).
+  val_check_tolerance: 0.002
+
 baselines:
   length:
     max_iter: 1000

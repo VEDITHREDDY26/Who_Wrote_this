@@ -1,9 +1,11 @@
 """Transformer tests with a tiny randomly initialised DistilBERT saved locally (no downloads)."""
 
 import json
+import random
 from pathlib import Path
 
 import numpy as np
+import pandas as pd
 import pytest
 import torch
 import torch.nn.functional as F
@@ -14,6 +16,7 @@ from transformers import (
     DistilBertTokenizerFast,
 )
 
+from src.final_test import TEST_FLAG
 from src.models.transformer import (
     BEST_MODEL_DIR,
     DONE_FILE,
@@ -21,9 +24,12 @@ from src.models.transformer import (
     WeightedLossTrainer,
     complete_checkpoints,
     encode_texts,
+    load_best_model,
     mixed_precision,
+    predict_proba_texts,
 )
-from tests.test_train_cli import CLASSES, make_workspace, run_cli
+from tests.test_final_test import run_final
+from tests.test_train_cli import CLASSES, fake_split, make_workspace, run_cli
 
 WORDS = [f"w{c}{i}" for c in range(6) for i in range(5)] + ["the", "a", "of", "and", "text"]
 
@@ -148,3 +154,25 @@ def test_config_change_is_refused(workspace: Path, tiny_model: Path) -> None:
     refused = run_cli(changed, "--model", "transformer", "--run-name", "cfg",
                       "--max-epochs", "1")
     assert refused.returncode == 2 and "training.lr: 0.001 -> 0.0005" in refused.output
+
+
+def test_final_test_scores_the_transformer(workspace: Path, tiny_model: Path) -> None:
+    splits = workspace / "data" / "splits"
+    fake_split(4, "x", random.Random(1)).to_parquet(splits / "test.parquet", index=False)
+    config = transformer_config(workspace, tiny_model, "tf-final.yaml")
+    trained = run_cli(config, "--model", "transformer", "--run-name", "ft", "--max-epochs", "1")
+    assert trained.returncode == 0, trained.output
+
+    # The inference helper gives the same val probabilities as Hugging Face's Trainer.
+    model, tokenizer = load_best_model(workspace / "checkpoints" / "transformer" / "ft")
+    val = pd.read_parquet(splits / "val.parquet")
+    prob = predict_proba_texts(model, tokenizer, val["text"].tolist(), max_len=32,
+                               batch_size=16, device=torch.device("cpu"), use_amp=False)
+    saved = np.load(workspace / "results" / "transformer-ft_val_probs.npz")["y_prob"]
+    np.testing.assert_allclose(prob, saved, atol=1e-5)
+
+    proc = run_final(config, TEST_FLAG, "--models", "transformer", "--run", "transformer=ft")
+    assert proc.returncode == 0, proc.output
+    metrics = json.loads((workspace / "results" / "transformer_test_metrics.json").read_text())
+    assert metrics["n_samples"] == 24 and metrics["extra"]["run_name"] == "ft"
+    assert metrics["extra"]["pretrained_name"] == str(tiny_model)

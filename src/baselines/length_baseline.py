@@ -55,6 +55,12 @@ def fit_length_baseline(train: pd.DataFrame, class_weights: Sequence[float],
     return model
 
 
+def count_parameters(model: Pipeline) -> int:
+    """Number of learned logistic-regression weights (coefficients + intercepts)."""
+    lr = model[-1]
+    return int(lr.coef_.size + lr.intercept_.size)
+
+
 def run(config_path: str | None = None) -> dict[str, Any]:
     """Train on train, evaluate on val, save and return the result."""
     use_config(config_path)
@@ -70,12 +76,11 @@ def run(config_path: str | None = None) -> dict[str, Any]:
     y_prob = model.predict_proba(length_features(val["text"]))
     metrics = evaluate(val["label_id"].to_numpy(), y_prob.argmax(axis=1), y_prob,
                        cfg["classes"], cfg["training"]["human_label"])
-    lr = model[-1]
     result = {
         "model": "length_baseline", "split": "val", "features": list(FEATURE_NAMES),
         "params": dict(cfg["baselines"]["length"]), "val_macro_f1": metrics["macro_f1"],
         "metrics": metrics, "train_time_seconds": train_seconds,
-        "num_parameters": int(lr.coef_.size + lr.intercept_.size),
+        "num_parameters": count_parameters(model),
     }
     out = get_path("results_dir") / OUTPUT_SUBDIR / OUTPUT_FILE
     atomic_write_json(out, result)
