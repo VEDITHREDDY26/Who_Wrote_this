@@ -158,3 +158,12 @@ baselines:
   length:
     max_iter: 1000
     C: 1.0
+
+# Report and slide figures from the saved results (python -m src.analysis.figures).
+figures:
+  figures_subdir: figures              # inside results_dir
+  tables_subdir: tables                # inside results_dir: the numbers behind the figures (CSV)
+  formats: [png, pdf]                  # png for slides, pdf (vector) for the report
+  dpi: 200
+  calibration_bins: 10
+  length_bins: [10, 100, 150, 200, 250, 300, 400]   # words per text; the last bin is open-ended
