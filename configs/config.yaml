@@ -120,10 +120,10 @@ models:
     embed_dim: 128
     filter_sizes: [3, 4, 5]
     num_filters: 128
-    dropout: 0.5
+    dropout: 0.3
   lstm:
     embed_dim: 128
-    hidden_size: 128
+    hidden_size: 256
     num_layers: 1
     dropout: 0.3
   transformer:
