@@ -29,6 +29,7 @@ results/*
 !results/.gitkeep
 *.parquet
 *.csv
+*_results/
 
 # Editor and local tool settings
 .vscode/
