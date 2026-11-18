@@ -18,5 +18,6 @@ if ! hf auth whoami >/dev/null 2>&1; then
     hf auth login  # paste the Read token; Meta must have approved your Llama 2 request
 fi
 mkdir -p "$HF_HOME" logs
-hf download "$MODEL" --include "*.json" "*.safetensors" "tokenizer.model"
+# One --include per pattern: extra positional values would be read as file names instead.
+hf download "$MODEL" --include "*.json" --include "*.safetensors" --include "tokenizer.model"
 echo "Setup done: env $TD_ENV_DIR, weights in $HF_HOME"
