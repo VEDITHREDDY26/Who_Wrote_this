@@ -167,3 +167,31 @@ figures:
   dpi: 200
   calibration_bins: 10
   length_bins: [10, 100, 150, 200, 250, 300, 400]   # words per text; the last bin is open-ended
+
+# Follow-up experiment (the professor's question at the proposal): a text written by one model
+# and then rewritten by Llama - which author do our models name? Sources come from the val split
+# (the test split stays used once); passages are cut, rewritten, and both versions are scored by
+# the final models. python -m src.experiments.paraphrase {sample,generate,collect}, then
+# python -m src.experiments.paraphrase_eval.
+paraphrase:
+  output_subdir: paraphrase            # inside results_dir
+  source_split: val
+  groups:                              # name -> source class and texts (stratified by domain)
+    gpt_by_llama: {source: GPT, n: 600}
+    llama_by_llama: {source: Llama, n: 300}     # control: the author does not change
+    human_by_llama: {source: Human, n: 300}     # a human text polished by Llama
+  rewriter_class: Llama                # the class the rewriting model belongs to
+  max_words: 200                       # passages are cut to this many words, at a sentence end
+  min_words: 10                        # same floor as cleaning; shorter rewrites are dropped
+  generator:
+    model_name: meta-llama/Llama-2-70b-chat-hf  # RAID's Llama class (llama-chat) is this model
+    dtype: bfloat16
+    batch_size: 16
+    max_new_tokens: 512                # ~2x the longest passage; greedy decoding
+  system_prompt: You are a writing assistant who rewrites texts in your own words.
+  user_prompt: |-
+    Paraphrase the following text in your own words. Keep its meaning, its format and roughly its length. Reply with the paraphrased text only, with no introduction or comments.
+
+    Text:
+    {text}
+  check_agreement: 0.99                # reloaded models must reproduce >= this share of saved val predictions
