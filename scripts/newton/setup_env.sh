@@ -7,12 +7,13 @@ set -eo pipefail  # no -u: conda's activate scripts read unset variables
 source scripts/newton/env.sh
 MODEL=${TD_PARAPHRASE_MODEL:-meta-llama/Llama-2-70b-chat-hf}
 
-if [ ! -d "$TD_ENV_DIR" ]; then
+if [ ! -x "$TD_ENV_DIR/bin/python" ]; then  # conda is only needed to create the env
+    module load "$TD_CONDA_MODULE"
     conda create -y -p "$TD_ENV_DIR" python=3.11
+    source scripts/newton/env.sh  # puts the new env first on PATH
 fi
-conda activate "$TD_ENV_DIR"
-pip install --upgrade pip
-pip install -r requirements.txt
+python -m pip install --upgrade pip
+python -m pip install -r requirements.txt
 
 if ! hf auth whoami >/dev/null 2>&1; then
     hf auth login  # paste the Read token; Meta must have approved your Llama 2 request

@@ -11,7 +11,7 @@
 #SBATCH --mem=64G
 #SBATCH --time=06:00:00
 #SBATCH --output=logs/%x-%j.out
-set -eo pipefail  # no -u: conda's activate scripts read unset variables
+set -eo pipefail
 source scripts/newton/env.sh
 export HF_HUB_OFFLINE=1  # weights were downloaded by setup_env.sh; compute nodes may be offline
 
