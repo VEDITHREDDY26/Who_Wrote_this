@@ -1,6 +1,6 @@
 """Score the original and the Llama-rewritten passages with the final models; tables and figures.
 
-    python -m src.experiments.paraphrase_eval [--config PATH]
+    python -m src.experiments.paraphrase_eval [--config PATH] [--generator MODEL_ID]
 
 Uses the runs that were scored on test (results/final_test_summary.json), reloaded the same way
 as src.final_test. Before scoring, each reloaded model must reproduce its saved val predictions
@@ -9,14 +9,15 @@ the models in the results. Only passages whose rewrite is usable (status "ok") a
 both versions of each passage are scored, so every comparison is paired.
 
 Writes <results_dir>/<output_subdir>/<generator>/scores.parquet (one row per passage, model and
-version), the tables paraphrase_shift, paraphrase_by_domain and paraphrase_quality to
-<results_dir>/tables/, and figures 70-71 (PNG + PDF) with their captions to
-<results_dir>/figures/.
+version), the tables paraphrase_{shift,by_domain,quality}_<generator> to <results_dir>/tables/,
+and figures 70-71 (PNG + PDF, suffixed with the generator) with their captions to
+<results_dir>/figures/, so the runs of several rewriters sit side by side.
 """
 
 from __future__ import annotations
 
 import argparse
+import dataclasses
 import logging
 import sys
 from collections.abc import Callable, Mapping, Sequence
@@ -72,7 +73,7 @@ from src.utils.logging import setup_logging  # noqa: E402
 logger = logging.getLogger(__name__)
 
 SCORES_FILE = "scores.parquet"
-CAPTIONS_FILE = "paraphrase_captions.txt"
+CAPTIONS_FILE = "paraphrase_captions_{slug}.txt"
 VERSIONS = ("original", "rewrite")
 VERSION_LABELS = {"original": "Before", "rewrite": "After"}
 OTHER = "Other AI"
@@ -290,7 +291,8 @@ def model_name(model: str) -> str:
 
 
 def fig_shift(shift: pd.DataFrame, rewriter: str, human: str,
-              groups: Mapping[str, Mapping[str, Any]]) -> tuple[Figure, str]:
+              groups: Mapping[str, Mapping[str, Any]],
+              rewriter_model: str) -> tuple[Figure, str]:
     """Before/after stacked bars of who each model names, one panel per group."""
     names = [g for g in groups if g in set(shift["group"])]
     models = [m for m in MODEL_STYLE if m in set(shift["model"])]
@@ -323,7 +325,8 @@ def fig_shift(shift: pd.DataFrame, rewriter: str, human: str,
         ax.set_xticks([])
         for spine in ax.spines.values():
             spine.set_visible(False)
-        ax.set_title(f"{source} texts rewritten by {rewriter}  (n = {int(df['n'].iloc[0])} per "
+        ax.set_title(f"{source} texts rewritten by {rewriter_model}  (n = "
+                     f"{int(df['n'].iloc[0])} per "
                      "model)", fontsize=10.5)
         handles = [Patch(color=outcome_color(o, source, rewriter, human),
                          label=f"{o} (rewriter)" if o == rewriter else o) for o in order]
@@ -334,7 +337,7 @@ def fig_shift(shift: pd.DataFrame, rewriter: str, human: str,
     source = main["source"].iloc[0]
     before, after = (main.set_index("version").loc[v, "share_rewriter"] for v in VERSIONS)
     kept = main.set_index("version").loc["rewrite", "share_source"]
-    title = (f"After a {rewriter} rewrite, {model_name(models[0])} names {rewriter} for "
+    title = (f"After a {rewriter_model} rewrite, {model_name(models[0])} names {rewriter} for "
              f"{fmt_pct(after)} of {source} texts (was {fmt_pct(before)}); {fmt_pct(kept)} "
              f"still read as {source}")
     add_titles(fig, title, "Share of passages each model assigns to each author, before and "
@@ -344,8 +347,8 @@ def fig_shift(shift: pd.DataFrame, rewriter: str, human: str,
     return fig, title
 
 
-def fig_by_domain(table: pd.DataFrame, group: str, source: str,
-                  rewriter: str) -> tuple[Figure, str]:
+def fig_by_domain(table: pd.DataFrame, group: str, source: str, rewriter: str,
+                  rewriter_model: str) -> tuple[Figure, str]:
     """Heatmap: share of rewrites given to the rewriter, per model and domain."""
     fig, ax = plt.subplots(figsize=(8.6, 0.6 * len(table) + 1.4))
     heatmap(ax, table.to_numpy(), [model_name(m) for m in table.index], list(table.columns),
@@ -354,8 +357,8 @@ def fig_by_domain(table: pd.DataFrame, group: str, source: str,
     title = (f"The switch to {rewriter} is strongest for {mean.index[0]} "
              f"({fmt_pct(mean.iloc[0])}) and weakest for {mean.index[-1]} "
              f"({fmt_pct(mean.iloc[-1])})")
-    add_titles(fig, title, f"Share of {source} texts named {rewriter} after the {rewriter} "
-                           f"rewrite, per domain (group {group})")
+    add_titles(fig, title, f"Share of {source} texts named {rewriter} after the "
+                           f"{rewriter_model} rewrite, per domain (group {group})")
     return fig, title
 
 
@@ -374,10 +377,16 @@ def load_rewrites(out_dir: Path,
     return rewrites, usable
 
 
-def run(cfg: Mapping[str, Any]) -> list[Path]:
-    """Score both versions with every final model, then write tables and figures."""
+def run(cfg: Mapping[str, Any], generator: str | None = None) -> list[Path]:
+    """Score both versions with every final model, then write tables and figures.
+
+    `generator` overrides paraphrase.generator.model_name (which rewrites to evaluate).
+    """
     section = cfg["paraphrase"]
     settings = GeneratorSettings.from_config(section["generator"])
+    if generator:
+        settings = dataclasses.replace(settings, model_name=generator)
+    slug = settings.slug
     results_dir = get_path("results_dir")
     out_dir = experiment_dir(section)
     all_rewrites, rewrites = load_rewrites(out_dir, settings)
@@ -401,22 +410,25 @@ def run(cfg: Mapping[str, Any]) -> list[Path]:
     shift = shift_table(scores, rewriter, human)
     main_group = next(iter(section["groups"]))
     by_domain = domain_table(scores, main_group, rewriter)
-    tables = {"paraphrase_shift": shift,
-              "paraphrase_by_domain": by_domain.reset_index(),
-              "paraphrase_quality": quality_table(all_rewrites)}
+    tables = {f"paraphrase_shift_{slug}": shift,
+              f"paraphrase_by_domain_{slug}": by_domain.reset_index(),
+              f"paraphrase_quality_{slug}": quality_table(all_rewrites)}
     written = write_tables(tables, results_dir / fig_settings.tables_subdir)
 
     fig_dir = results_dir / fig_settings.figures_subdir
     captions = []
     with plt.rc_context(STYLE):
         for name, (fig, caption) in {
-            "70_paraphrase_shift": fig_shift(shift, rewriter, human, section["groups"]),
-            "71_paraphrase_by_domain": fig_by_domain(
-                by_domain, main_group, section["groups"][main_group]["source"], rewriter),
+            f"70_paraphrase_shift_{slug}": fig_shift(shift, rewriter, human,
+                                                     section["groups"], settings.label),
+            f"71_paraphrase_by_domain_{slug}": fig_by_domain(
+                by_domain, main_group, section["groups"][main_group]["source"], rewriter,
+                settings.label),
         }.items():
             written += save_figure(fig, fig_dir, name, fig_settings)
             captions.append(f"{name}: {caption}")
-    atomic_write_bytes(fig_dir / CAPTIONS_FILE, ("\n".join(captions) + "\n").encode("utf-8"))
+    atomic_write_bytes(fig_dir / CAPTIONS_FILE.format(slug=slug),
+                       ("\n".join(captions) + "\n").encode("utf-8"))
     print(shift.to_string(index=False, float_format=lambda v: f"{v:.3f}"))
     return written
 
@@ -425,12 +437,15 @@ def main(argv: Sequence[str] | None = None) -> int:
     """CLI entry point."""
     parser = argparse.ArgumentParser(description="Score the paraphrase experiment.")
     parser.add_argument("--config", default=None, help="config YAML (default: configs/config.yaml)")
+    parser.add_argument("--generator", default=None, metavar="MODEL_ID",
+                        help="evaluate this rewriter's outputs instead of "
+                             "paraphrase.generator.model_name")
     args = parser.parse_args(argv)
     use_config(args.config)
     cfg = load_config()
     setup_logging(experiment_dir(cfg["paraphrase"]) / "paraphrase_eval.log")
     try:
-        written = run(cfg)
+        written = run(cfg, args.generator)
     except (ParaphraseEvalError, FinalTestError, FileNotFoundError) as err:
         logger.error("%s", err)
         return USAGE_ERROR_EXIT_CODE

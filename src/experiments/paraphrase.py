@@ -25,7 +25,7 @@ import re
 import sys
 import time
 from collections.abc import Callable, Mapping, Sequence
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from pathlib import Path
 from typing import Any
 
@@ -97,6 +97,12 @@ class GeneratorSettings:
     def slug(self) -> str:
         """Folder name for this generator's outputs, e.g. 'llama-2-70b-chat-hf'."""
         return self.model_name.rstrip("/").split("/")[-1].lower()
+
+    @property
+    def label(self) -> str:
+        """Display name, e.g. 'Llama-2-70b-chat' or 'Llama-3-70B-Instruct'."""
+        name = self.model_name.rstrip("/").split("/")[-1]
+        return re.sub(r"-hf$", "", re.sub(r"^Meta-", "", name))
 
 
 @dataclass(frozen=True)
@@ -387,6 +393,9 @@ def parse_args(argv: Sequence[str] | None = None) -> argparse.Namespace:
     parser.add_argument("--config", default=None, help="config YAML (default: configs/config.yaml)")
     parser.add_argument("--limit", type=int, default=None,
                         help="generate: rewrite at most N more passages (quick check)")
+    parser.add_argument("--generator", default=None, metavar="MODEL_ID",
+                        help="Hugging Face model id of the rewriter; overrides "
+                             "paraphrase.generator.model_name (each gets its own folder)")
     return parser.parse_args(argv)
 
 
@@ -398,6 +407,8 @@ def main(argv: Sequence[str] | None = None) -> int:
     out_dir = experiment_dir(cfg["paraphrase"])
     setup_logging(out_dir / LOG_FILE)
     settings = GeneratorSettings.from_config(cfg["paraphrase"]["generator"])
+    if args.generator:
+        settings = replace(settings, model_name=args.generator)
     try:
         if args.step == "sample":
             run_sample(cfg, out_dir)

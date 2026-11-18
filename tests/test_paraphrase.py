@@ -1,5 +1,6 @@
 """Tests for the paraphrase experiment (src.experiments) with a fake rewriter instead of Llama."""
 
+import dataclasses
 import random
 from collections.abc import Iterator, Sequence
 from pathlib import Path
@@ -121,7 +122,9 @@ def test_generator_settings_and_mixing_are_checked(tmp_path: Path) -> None:
     settings = GeneratorSettings.from_config({"model_name": "meta-llama/Llama-2-7b-chat-hf",
                                               "dtype": "bfloat16", "batch_size": 2,
                                               "max_new_tokens": 8})
-    assert settings.slug == "llama-2-7b-chat-hf"
+    assert (settings.slug, settings.label) == ("llama-2-7b-chat-hf", "Llama-2-7b-chat")
+    llama3 = dataclasses.replace(settings, model_name="meta-llama/Meta-Llama-3-70B-Instruct")
+    assert (llama3.slug, llama3.label) == ("meta-llama-3-70b-instruct", "Llama-3-70B-Instruct")
     with pytest.raises(ValueError, match="dtype"):
         GeneratorSettings.from_config({"model_name": "m", "dtype": "fp99", "batch_size": 1,
                                        "max_new_tokens": 1})
@@ -185,11 +188,12 @@ def test_end_to_end_with_a_fake_rewriter(trained_workspace: Path,
 
     written = paraphrase_eval.run(cfg)
     names = {p.name for p in written}
-    assert {"70_paraphrase_shift.png", "71_paraphrase_by_domain.png",
-            "paraphrase_shift.csv", "paraphrase_quality.csv"} <= names
+    assert {"70_paraphrase_shift_fake-rewriter.png", "71_paraphrase_by_domain_fake-rewriter.png",
+            "paraphrase_shift_fake-rewriter.csv", "paraphrase_quality_fake-rewriter.csv"} <= names
     scores = pd.read_parquet(out_dir / settings.slug / "scores.parquet")
     assert len(scores) == 2 * len(sources)  # both versions of every passage
-    shift = pd.read_csv(trained_workspace / "results" / "tables" / "paraphrase_shift.csv")
+    shift = pd.read_csv(trained_workspace / "results" / "tables" /
+                        "paraphrase_shift_fake-rewriter.csv")
     shares = shift[["share_source", "share_rewriter", "share_human", "share_other"]]
     gpt = shift["group"] == "gpt_by_llama"
     assert (shares[gpt].sum(axis=1).round(6) == 1).all()  # GPT, Llama, Human, other: no overlap
